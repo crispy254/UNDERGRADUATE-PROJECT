@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nova — Academic & Wellbeing Companion</title>
+<style>
+  :root {
+    --bg: #171a30;
+    --bg-panel: #20244a;
+    --bg-panel-2: #262c56;
+    --text: #f2efe6;
+    --text-muted: #9295b8;
+    --accent: #f0a860;
+    --accent-soft: #f0a86033;
+    --sage: #8fc0a3;
+    --sage-soft: #8fc0a333;
+    --coral: #e08a7d;
+    --border: #33386b;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at top, #1e2247 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: var(--font-body);
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 1100px;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 100vh;
+  }
+
+  @media (max-width: 820px) {
+    .app { grid-template-columns: 1fr; }
+    .avatar-panel { min-height: 260px; }
+  }
+
+  /* ---------- Avatar panel (placeholder slot) ---------- */
+  .avatar-panel {
+    background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg) 100%);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 28px;
+    position: relative;
+  }
+
+  .eyebrow {
+    position: absolute;
+    top: 28px;
+    left: 28px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .orb-wrap {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .orb {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--accent) 0%, #c97a4a 55%, #8a4a35 100%);
+    box-shadow: 0 0 60px 10px var(--accent-soft);
+    animation: breathe 4.5s ease-in-out infinite;
+    transition: background 0.8s ease, box-shadow 0.8s ease;
+  }
+
+  .orb.state-calm {
+    background: radial-gradient(circle at 35% 30%, var(--sage) 0%, #5f9678 55%, #3d6650 100%);
+    box-shadow: 0 0 60px 10px var(--sage-soft);
+  }
+
+  .orb.state-thinking {
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); opacity: 0.92; }
+    50% { transform: scale(1.08); opacity: 1; }
+  }
+
+  .avatar-caption {
+    margin-top: 28px;
+    text-align: center;
+  }
+
+  .avatar-caption h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+
+  .avatar-caption p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .avatar-slot-badge {
+    margin-top: 22px;
+    padding: 7px 14px;
+    border: 1px dashed var(--border);
+    border-radius: 100px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .status-line {
+    position: absolute;
+    bottom: 28px;
+    left: 28px;
+    right: 28px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sage);
+  }
+  .status-dot.offline { background: var(--coral); }
+
+  /* ---------- Chat panel ---------- */
+  .chat-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .chat-header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-header h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 26px;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+
+  .chat-header p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .msg {
+    max-width: 78%;
+    padding: 13px 16px;
+    border-radius: 16px;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #23180d;
+    border-bottom-right-radius: 4px;
+  }
+
+  .msg.nova {
+    align-self: flex-start;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .msg.system-note {
+    align-self: center;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-family: var(--font-mono);
+    text-align: center;
+  }
+
+  .msg-tag {
+    display: inline-block;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .empty-state {
+    margin: auto;
+    text-align: center;
+    color: var(--text-muted);
+    max-width: 360px;
+  }
+
+  .empty-state h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    color: var(--text);
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .empty-state p { font-size: 13.5px; line-height: 1.6; }
+
+  .suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 16px;
+  }
+
+  .suggestion-chip {
+    font-size: 12.5px;
+    padding: 7px 12px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .suggestion-chip:hover { border-color: var(--accent); color: var(--text); }
+
+  .composer {
+    padding: 18px 32px 26px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 13px 16px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14.5px;
+    line-height: 1.5;
+    max-height: 120px;
+  }
+
+  .composer textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .composer button {
+    background: var(--accent);
+    color: #23180d;
+    border: none;
+    border-radius: 14px;
+    padding: 0 22px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .composer button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .composer button:focus-visible,
+  .suggestion-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  #mic-btn {
+    background: var(--bg-panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    width: 46px;
+    flex-shrink: 0;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  #mic-btn:hover { border-color: var(--accent); }
+
+  #mic-btn.recording {
+    background: var(--coral);
+    border-color: var(--coral);
+    animation: pulse-rec 1.2s ease-in-out infinite;
+  }
+
+  #mic-btn.processing {
+    opacity: 0.6;
+    cursor: not-allowed;
+    animation: none;
+  }
+
+  @keyframes pulse-rec {
+    0%, 100% { box-shadow: 0 0 0 0 #e08a7d55; }
+    50% { box-shadow: 0 0 0 8px #e08a7d00; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb { animation: none; }
+  }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Avatar / digital-human slot — placeholder for now -->
+  <div class="avatar-panel">
+    <div class="eyebrow">Nova</div>
+
+    <div class="orb-wrap">
+      <div class="orb" id="orb"></div>
+    </div>
+
+    <div class="avatar-caption">
+      <h2>Nova</h2>
+      <p id="avatar-desc">Your academic &amp; wellbeing companion.<br>Grounded in real support resources, not judgment.</p>
+    </div>
+
+    <div class="avatar-slot-badge" id="avatar-badge">◐ digital human avatar — coming soon</div>
+
+    <div class="status-line">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">checking connection…</span>
+    </div>
+
+    <button id="lang-toggle" class="avatar-slot-badge" style="position:absolute; top:28px; right:28px; cursor:pointer; background:none;">EN / 한국어</button>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <h1 id="chat-title">Talk it through</h1>
+      <p id="chat-subtitle">Academic stress, career worries, or just checking in — whatever's on your mind.</p>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="empty-state" id="empty-state">
+        <h3 id="empty-title">Nothing said yet</h3>
+        <p id="empty-desc">Nova can help with exam stress, career anxiety, feeling stuck with people around you, or general academic questions.</p>
+        <div class="suggestions">
+          <button class="suggestion-chip" id="chip-exam" data-msg="I'm really stressed about my exams this week">exam stress</button>
+          <button class="suggestion-chip" id="chip-career" data-msg="I'm anxious about a job interview coming up">career anxiety</button>
+          <button class="suggestion-chip" id="chip-lonely" data-msg="I've been feeling kind of lonely lately">feeling lonely</button>
+          <button class="suggestion-chip" id="chip-study" data-msg="Can you explain recursion?">ask a study question</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <textarea id="input" placeholder="Type how you're doing…" rows="1"></textarea>
+      <button id="mic-btn" title="Click to start/stop recording" aria-label="Record voice message">🎤</button>
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Point this at your running backend. Defaults to local dev.
+  const API_BASE_URL = "http://localhost:8000";
+
+  const messagesEl = document.getElementById("messages");
+  const emptyState = document.getElementById("empty-state");
+  const inputEl = document.getElementById("input");
+  const sendBtn = document.getElementById("send-btn");
+  const micBtn = document.getElementById("mic-btn");
+  const langToggle = document.getElementById("lang-toggle");
+  const orb = document.getElementById("orb");
+  const statusDot = document.getElementById("status-dot");
+  const statusText = document.getElementById("status-text");
+
+  // ---------- Language ----------
+  let currentLanguage = localStorage.getItem("nova_language") || "en";
+  // Tracks connection state independently of language, so switching
+  // languages re-renders the CURRENT status in the new language
+  // instead of freezing whatever text was last set by checkHealth().
+  let connectionState = "checking"; // "checking" | "connected" | "offline"
+
+  const TRANSLATIONS = {
+    en: {
+      chatTitle: "Talk it through",
+      chatSubtitle: "Academic stress, career worries, or just checking in — whatever's on your mind.",
+      avatarDesc: "Your academic &amp; wellbeing companion.<br>Grounded in real support resources, not judgment.",
+      avatarBadge: "◐ digital human avatar — coming soon",
+      emptyTitle: "Nothing said yet",
+      emptyDesc: "Nova can help with exam stress, career anxiety, feeling stuck with people around you, or general academic questions.",
+      chipExam: "exam stress",
+      chipCareer: "career anxiety",
+      chipLonely: "feeling lonely",
+      chipStudy: "ask a study question",
+      msgExam: "I'm really stressed about my exams this week",
+      msgCareer: "I'm anxious about a job interview coming up",
+      msgLonely: "I've been feeling kind of lonely lately",
+      msgStudy: "Can you explain recursion?",
+      sendBtn: "Send",
+      placeholder: "Type how you're doing…",
+      statusConnected: "connected",
+      statusChecking: "checking connection…",
+      statusOffline: "backend not reachable — is uvicorn running?",
+      toggleLabel: "EN / 한국어",
+    },
+    ko: {
+      chatTitle: "이야기해 보세요",
+      chatSubtitle: "학업 스트레스, 진로 고민, 아니면 그냥 안부여도 괜찮아요 — 무엇이든 편하게 말해보세요.",
+      avatarDesc: "당신의 학업 및 마음 건강 동반자.<br>실제 지원 자료에 근거하며, 판단하지 않아요.",
+      avatarBadge: "◐ 디지털 휴먼 아바타 — 준비 중",
+      emptyTitle: "아직 대화가 없어요",
+      emptyDesc: "시험 스트레스, 진로 불안, 주변 사람들과의 관계, 또는 학업 관련 질문까지 Nova가 도와드릴 수 있어요.",
+      chipExam: "시험 스트레스",
+      chipCareer: "진로 불안",
+      chipLonely: "외로움",
+      chipStudy: "학업 질문하기",
+      msgExam: "이번 주 시험 때문에 너무 스트레스 받아요",
+      msgCareer: "다가오는 면접 때문에 불안해요",
+      msgLonely: "요즘 좀 외로운 것 같아요",
+      msgStudy: "재귀(recursion)에 대해 설명해 줄 수 있어요?",
+      sendBtn: "보내기",
+      placeholder: "지금 기분이 어떤지 적어보세요…",
+      statusConnected: "연결됨",
+      statusChecking: "연결 확인 중…",
+      statusOffline: "백엔드에 연결할 수 없어요 — uvicorn이 실행 중인가요?",
+      toggleLabel: "한국어 / EN",
+    },
+  };
+
+  function renderStatus() {
+    const t = TRANSLATIONS[currentLanguage];
+    statusDot.classList.toggle("offline", connectionState === "offline");
+    statusText.textContent =
+      connectionState === "connected" ? t.statusConnected :
+      connectionState === "offline" ? t.statusOffline :
+      t.statusChecking;
+  }
+
+  function applyLanguage() {
+    const t = TRANSLATIONS[currentLanguage];
+
+    langToggle.textContent = t.toggleLabel;
+    inputEl.placeholder = t.placeholder;
+    sendBtn.textContent = t.sendBtn;
+    document.getElementById("chat-title").textContent = t.chatTitle;
+    document.getElementById("chat-subtitle").textContent = t.chatSubtitle;
+    document.getElementById("avatar-desc").innerHTML = t.avatarDesc;
+    document.getElementById("avatar-badge").textContent = t.avatarBadge;
+
+    // The empty-state block gets removed from the DOM after the first
+    // message is sent (see addMessage) - only touch it if it's still there.
+    const emptyTitleEl = document.getElementById("empty-title");
+    if (emptyTitleEl) {
+      emptyTitleEl.textContent = t.emptyTitle;
+      document.getElementById("empty-desc").textContent = t.emptyDesc;
+
+      const chipExam = document.getElementById("chip-exam");
+      const chipCareer = document.getElementById("chip-career");
+      const chipLonely = document.getElementById("chip-lonely");
+      const chipStudy = document.getElementById("chip-study");
+      chipExam.textContent = t.chipExam;
+      chipExam.dataset.msg = t.msgExam;
+      chipCareer.textContent = t.chipCareer;
+      chipCareer.dataset.msg = t.msgCareer;
+      chipLonely.textContent = t.chipLonely;
+      chipLonely.dataset.msg = t.msgLonely;
+      chipStudy.textContent = t.chipStudy;
+      chipStudy.dataset.msg = t.msgStudy;
+    }
+
+    renderStatus();
+  }
+
+  langToggle.addEventListener("click", () => {
+    currentLanguage = currentLanguage === "ko" ? "en" : "ko";
+    localStorage.setItem("nova_language", currentLanguage);
+    applyLanguage();
+  });
+
+  applyLanguage();
+
+  // Anonymous per-browser identifier for voice sessions (matches the
+  // no-login-needed design of the rest of the backend). Persisted in
+  // localStorage so it's stable across page reloads, not just per tab.
+  function getSessionId() {
+    let id = localStorage.getItem("nova_session_id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("nova_session_id", id);
+    }
+    return id;
+  }
+
+  // Maps backend-inferred emotion -> orb visual state.
+  const CALM_EMOTIONS = new Set(["neutral", "hopeful"]);
+
+  function setOrbState(emotion) {
+    orb.classList.remove("state-calm", "state-thinking");
+    if (emotion && CALM_EMOTIONS.has(emotion)) {
+      orb.classList.add("state-calm");
+    }
+  }
+
+  function setThinking(isThinking) {
+    orb.classList.toggle("state-thinking", isThinking);
+  }
+
+  function addMessage(role, text, tag) {
+    if (emptyState) emptyState.remove();
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    div.textContent = text;
+    if (tag) {
+      const tagEl = document.createElement("div");
+      tagEl.className = "msg-tag";
+      tagEl.textContent = tag;
+      div.appendChild(tagEl);
+    }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  function addSystemNote(text) {
+    if (emptyState) emptyState.remove();
+    const div = document.createElement("div");
+    div.className = "msg system-note";
+    div.textContent = text;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function checkHealth() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/health`);
+      connectionState = res.ok ? "connected" : "offline";
+    } catch (e) {
+      connectionState = "offline";
+    }
+    renderStatus();
+  }
+
+  // Shared between typed and voice replies, so both look/behave the
+  // same way once a reply comes back from the backend.
+  // `audioBase64` is only present for voice replies - when given, a
+  // small 🔊 replay button is attached to the bubble, since browsers
+  // can silently block autoplay after an async round trip even though
+  // the recording itself started from a real click.
+  function renderNovaReply(data, audioBase64) {
+    const tag = data.emotion
+      ? `${data.emotion} · ${data.stress_type || "general"}`
+      : null;
+
+    const bubble = addMessage("nova", data.reply, tag);
+
+    if (audioBase64) {
+      const playBtn = document.createElement("button");
+      playBtn.textContent = "🔊 Replay";
+      playBtn.style.cssText =
+        "margin-top:8px;display:block;background:none;border:1px solid var(--border);" +
+        "color:var(--text-muted);border-radius:100px;padding:4px 10px;font-size:11px;cursor:pointer;";
+      playBtn.addEventListener("click", () => playBase64Wav(audioBase64));
+      bubble.appendChild(playBtn);
+    }
+
+    setOrbState(data.emotion);
+
+    if (data.risk_flag) {
+      addSystemNote("Nova shared some support resources above — please take a look.");
+    }
+  }
+
+  function playBase64Wav(base64Audio) {
+    if (!base64Audio) return;
+    const audio = new Audio(`data:audio/wav;base64,${base64Audio}`);
+    audio.play().catch(() => {
+      // Autoplay blocked - the 🔊 Replay button on the bubble is the
+      // fallback, so this isn't worth its own error message.
+    });
+  }
+
+  async function sendMessage(text) {
+    if (!text.trim()) return;
+
+    addMessage("user", text);
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+    sendBtn.disabled = true;
+    setThinking(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat/counseling`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, language: currentLanguage }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server responded ${res.status}`);
+      }
+
+      const data = await res.json();
+      renderNovaReply(data);
+    } catch (err) {
+      addSystemNote(
+        "Couldn't reach Nova right now. Make sure the backend is running " +
+        `(uvicorn app:app --reload) and reachable at ${API_BASE_URL}.`
+      );
+    } finally {
+      sendBtn.disabled = false;
+      setThinking(false);
+      inputEl.focus();
+    }
+  }
+
+  // ---------- Voice (mic) ----------
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let isRecording = false;
+
+  async function startRecording() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      addSystemNote("Couldn't access your microphone — check your browser's permission settings.");
+      return;
+    }
+
+    audioChunks = [];
+    // webm/opus is what Chrome/Edge record by default - the backend's
+    // faster-whisper decoder handles this format directly, no
+    // conversion needed on either side.
+    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      const blob = new Blob(audioChunks, { type: "audio/webm" });
+      sendVoiceMessage(blob);
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    micBtn.classList.add("recording");
+    micBtn.textContent = "⏹";
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      isRecording = false;
+      micBtn.classList.remove("recording");
+    }
+  }
+
+  async function sendVoiceMessage(audioBlob) {
+    micBtn.classList.add("processing");
+    micBtn.textContent = "…";
+    sendBtn.disabled = true;
+    setThinking(true);
+
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "recording.webm");
+    formData.append("session_id", getSessionId());
+    formData.append("language", currentLanguage);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/voice/chat`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server responded ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (!data.transcript) {
+        addSystemNote("Didn't catch that — try recording again.");
+        return;
+      }
+
+      // Show what was actually heard as the "user" bubble, same as a
+      // typed message, so it's clear to the student what Nova heard
+      // (useful for catching STT mishears too).
+      addMessage("user", data.transcript);
+      renderNovaReply(data, data.audio_base64);
+      playBase64Wav(data.audio_base64);
+
+      if (data.audio_error) {
+        addSystemNote("Voice reply text is above, but speech playback failed — check the backend logs.");
+      }
+      if (data.tts_language_warning && !sessionStorage.getItem("nova_ko_voice_warned")) {
+        addSystemNote(data.tts_language_warning);
+        sessionStorage.setItem("nova_ko_voice_warned", "1");
+      }
+    } catch (err) {
+      addSystemNote(
+        "Couldn't reach Nova right now. Make sure the backend is running " +
+        `(uvicorn app:app --reload) and reachable at ${API_BASE_URL}.`
+      );
+    } finally {
+      micBtn.classList.remove("processing");
+      micBtn.textContent = "🎤";
+      sendBtn.disabled = false;
+      setThinking(false);
+    }
+  }
+
+  micBtn.addEventListener("click", () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  });
+
+  sendBtn.addEventListener("click", () => sendMessage(inputEl.value));
+
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(inputEl.value);
+    }
+  });
+
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+  });
+
+  document.querySelectorAll(".suggestion-chip").forEach((chip) => {
+    chip.addEventListener("click", () => sendMessage(chip.dataset.msg));
+  });
+
+  checkHealth();
+</script>
+
+</body>
+</html>
