@@ -51,3 +51,13 @@ backend/unsloth_compiled_cache/
 
 # Office lock files
 ~$*
+
+# Project documents and research materials
+paper/
+pic/
+shared/
+
+Nova_Retraining_Evaluation_Report.docx
+Project Status Report.docx
+UNGERGRADUATE PROJECT STATUS REPORT.pptx
+labeled_test_set_starter.json
