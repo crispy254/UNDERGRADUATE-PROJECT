@@ -1,40 +1,40 @@
 """
-finetune_lora.py
------------------
-LoRA fine-tune of Llama 3.2 (3B, Instruct) on Nova's counseling
-dialogue, using Unsloth (2-5x faster, ~60-70% less VRAM than plain
-Hugging Face Trainer) so this comfortably fits a free Colab T4.
+finetune_lora.py (v2 - local retrain)
+----------------------------------------
+LoRA fine-tune of Llama 3.2 (3B, Instruct) on the broadened dataset
+from prepare_dataset.py, running locally on your RTX PRO 4000
+(Blackwell, 24GB VRAM) instead of Colab.
 
-Run in Colab, AFTER prepare_dataset.py has produced
-training_data/combined.jsonl:
+What's different from the Colab version:
+  - No Google Drive, no Colab-specific paths - everything local
+  - Native bf16 (Blackwell supports it directly - the fp16 workaround
+    was only needed for the T4, which couldn't do bf16)
+  - Uses train.jsonl AND val.jsonl - tracks validation loss during
+    training, so you can see overfitting starting (val loss rising
+    while train loss keeps falling) instead of training blind
+  - Larger batch size (24GB VRAM vs. T4's 15GB allows more headroom)
 
-    !pip install unsloth
-    !python finetune_lora.py
-
-Output:
-    nova-counseling-lora/    - the LoRA adapter alone (~100MB)
-    nova-counseling-gguf/    - merged, quantized, Ollama-ready GGUF
-
-I can't run this myself - this sandbox has no GPU and no network
-access to pull the base model or datasets. If a cell errors in Colab,
-paste the traceback back and I'll fix the script from that.
+Run (in your nova_train conda environment):
+    conda activate nova_train
+    cd C:\\Users\\chosun\\Desktop\\PROJECTS\\UNDERGRADUATE\\backend
+    python finetune_lora.py
 """
 import json
 import os
 
-DATASET_PATH = os.path.join(os.path.dirname(__file__), "training_data", "combined.jsonl")
+TRAIN_PATH = os.path.join(os.path.dirname(__file__), "training_data", "train.jsonl")
+VAL_PATH = os.path.join(os.path.dirname(__file__), "training_data", "val.jsonl")
 BASE_MODEL = "unsloth/Llama-3.2-3B-Instruct"
 MAX_SEQ_LENGTH = 2048
-OUTPUT_LORA_DIR = "nova-counseling-lora"
-OUTPUT_GGUF_DIR = "nova-counseling-gguf"
-GGUF_QUANTIZATION = "q4_k_m"   # good balance of quality vs. size/speed on consumer hardware
+OUTPUT_LORA_DIR = os.path.join(os.path.dirname(__file__), "nova-counseling-lora-v2")
+OUTPUT_GGUF_DIR = os.path.join(os.path.dirname(__file__), "nova-counseling-gguf-v2")
+GGUF_QUANTIZATION = "q4_k_m"
 
 
-def load_training_examples(path: str) -> list[dict]:
+def load_jsonl(path: str) -> list[dict]:
     if not os.path.exists(path):
         raise FileNotFoundError(
-            f"{path} not found. Run prepare_dataset.py first to build it "
-            "from the real counseling datasets (CounselChat, ESConv, etc.)."
+            f"{path} not found. Run prepare_dataset.py first."
         )
     examples = []
     with open(path, "r", encoding="utf-8") as f:
@@ -50,36 +50,20 @@ def main():
     from datasets import Dataset
     from trl import SFTTrainer, SFTConfig
 
-    # T4 (Turing, compute capability 7.5) does NOT support bf16 - only
-    # Ampere+ (A100, etc.) does. SFTConfig defaults to requesting bf16
-    # if left unset, which crashes on T4 with "doesn't support bf16/gpu".
-    # is_bfloat16_supported() checks the actual GPU and picks correctly
-    # either way, so this same script works unmodified on a T4 or an A100.
+    train_examples = load_jsonl(TRAIN_PATH)
+    val_examples = load_jsonl(VAL_PATH)
+    print(f"Loaded {len(train_examples)} training examples")
+    print(f"Loaded {len(val_examples)} validation examples")
+
     bf16_ok = is_bfloat16_supported()
+    print(f"bf16 supported on this GPU: {bf16_ok}")  # should be True on Blackwell
 
-    examples = load_training_examples(DATASET_PATH)
-    print(f"Loaded {len(examples)} training examples from {DATASET_PATH}")
-    if len(examples) < 20:
-        print(
-            "WARNING: very small training set. LoRA can still run, but "
-            "expect a subtle style/tone shift rather than deep behavior "
-            "change - that's normal and fine for a persona fine-tune."
-        )
-
-    # ------------------------------------------------------------
-    # 1. Load base model in 4-bit (QLoRA) - this is what makes a 3B
-    #    model trainable on a free T4's ~15GB VRAM.
-    # ------------------------------------------------------------
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=BASE_MODEL,
         max_seq_length=MAX_SEQ_LENGTH,
         load_in_4bit=True,
     )
 
-    # ------------------------------------------------------------
-    # 2. Attach LoRA adapters. Only these (~1-2% of total params) get
-    #    trained; the base weights stay frozen.
-    # ------------------------------------------------------------
     model = FastLanguageModel.get_peft_model(
         model,
         r=16,
@@ -94,33 +78,28 @@ def main():
         random_state=3407,
     )
 
-    # ------------------------------------------------------------
-    # 3. Format examples with the model's own chat template, so the
-    #    fine-tune reinforces the exact turn structure Ollama will use
-    #    at inference time via llm.py.
-    # ------------------------------------------------------------
     def format_example(ex):
         text = tokenizer.apply_chat_template(
             ex["messages"], tokenize=False, add_generation_prompt=False
         )
         return {"text": text}
 
-    dataset = Dataset.from_list(examples).map(format_example)
+    train_dataset = Dataset.from_list(train_examples).map(format_example)
+    val_dataset = Dataset.from_list(val_examples).map(format_example)
 
-    # ------------------------------------------------------------
-    # 4. Train. 3 epochs is deliberately light for a persona/style
-    #    fine-tune on a few thousand examples - more risks overfitting
-    #    into repeating training phrases verbatim.
-    # ------------------------------------------------------------
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
         dataset_text_field="text",
         max_seq_length=MAX_SEQ_LENGTH,
         args=SFTConfig(
-            per_device_train_batch_size=2,
+            per_device_train_batch_size=4,   # up from 2 on the T4 - 24GB has more headroom
             gradient_accumulation_steps=4,
+            per_device_eval_batch_size=4,
+            eval_strategy="steps",
+            eval_steps=100,
             warmup_steps=10,
             num_train_epochs=3,
             learning_rate=2e-4,
@@ -129,33 +108,37 @@ def main():
             weight_decay=0.01,
             lr_scheduler_type="linear",
             seed=3407,
-            output_dir="outputs",
+            output_dir=os.path.join(os.path.dirname(__file__), "outputs"),
             fp16=not bf16_ok,
             bf16=bf16_ok,
+            save_strategy="steps",
+            save_steps=200,
+            load_best_model_at_end=True,   # keep the checkpoint with the LOWEST val loss,
+            metric_for_best_model="eval_loss",  # not just whatever epoch 3 happens to land on
         ),
     )
 
     print("Starting training...")
     trainer.train()
 
-    # ------------------------------------------------------------
-    # 5. Save the LoRA adapter on its own (small, portable).
-    # ------------------------------------------------------------
+    print("\nFinal evaluation on validation set:")
+    metrics = trainer.evaluate()
+    print(metrics)
+    with open(os.path.join(os.path.dirname(__file__), "training_data", "val_metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=2)
+
     model.save_pretrained(OUTPUT_LORA_DIR)
     tokenizer.save_pretrained(OUTPUT_LORA_DIR)
     print(f"Saved LoRA adapter to {OUTPUT_LORA_DIR}/")
 
-    # ------------------------------------------------------------
-    # 6. Export a merged, quantized GGUF - this is what Ollama loads
-    #    directly. Unsloth handles the llama.cpp conversion internally.
-    # ------------------------------------------------------------
     print("Exporting to GGUF (this step takes several minutes)...")
     model.save_pretrained_gguf(
         OUTPUT_GGUF_DIR, tokenizer, quantization_method=GGUF_QUANTIZATION
     )
-    print(f"Saved GGUF export to {OUTPUT_GGUF_DIR}/")
-    print("\nDone. Download the nova-counseling-gguf/ folder and follow "
-          "the Ollama setup steps to load it as `nova-counseling`.")
+    print(f"Saved GGUF export to {OUTPUT_GGUF_DIR}/ (or {OUTPUT_GGUF_DIR}_gguf/ - "
+          f"check both, Unsloth's naming has been inconsistent before)")
+    print("\nDone. This is all local - no download step needed. Point Ollama's "
+          "Modelfile at whichever folder actually has the .gguf file.")
 
 
 if __name__ == "__main__":

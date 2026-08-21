@@ -33,3 +33,21 @@ Thumbs.db
 *.sqlite3
 # Local LLM model files
 *.gguf
+
+# Model outputs - large, regenerable via finetune_lora.py
+backend/Nova-counseling-v2/
+backend/nova-counseling-gguf-v2/
+backend/nova-counseling-gguf-v2_gguf/
+backend/nova-counseling-lora-v2/
+backend/outputs/
+backend/training_data/
+
+# Vector store - regenerable via rag.py
+backend/chroma_store/
+
+# Unsloth cache
+unsloth_compiled_cache/
+backend/unsloth_compiled_cache/
+
+# Office lock files
+~$*

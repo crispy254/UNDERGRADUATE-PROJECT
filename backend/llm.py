@@ -17,7 +17,7 @@ import json
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "nova-counseling"        
+MODEL_NAME = "llama3.2"        
                                
 DEFAULT_TIMEOUT = 90           
 KEEP_ALIVE = "30m"             

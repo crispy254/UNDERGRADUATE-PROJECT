@@ -4,371 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nova — Academic & Wellbeing Companion</title>
-<style>
-  :root {
-    --bg: #171a30;
-    --bg-panel: #20244a;
-    --bg-panel-2: #262c56;
-    --text: #f2efe6;
-    --text-muted: #9295b8;
-    --accent: #f0a860;
-    --accent-soft: #f0a86033;
-    --sage: #8fc0a3;
-    --sage-soft: #8fc0a333;
-    --coral: #e08a7d;
-    --border: #33386b;
-    --font-display: 'Fraunces', Georgia, serif;
-    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
-  }
-
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
-  * { box-sizing: border-box; }
-
-  body {
-    margin: 0;
-    min-height: 100vh;
-    background: radial-gradient(ellipse at top, #1e2247 0%, var(--bg) 60%);
-    color: var(--text);
-    font-family: var(--font-body);
-    display: flex;
-    align-items: stretch;
-    justify-content: center;
-  }
-
-  .app {
-    width: 100%;
-    max-width: 1100px;
-    display: grid;
-    grid-template-columns: 340px 1fr;
-    min-height: 100vh;
-  }
-
-  @media (max-width: 820px) {
-    .app { grid-template-columns: 1fr; }
-    .avatar-panel { min-height: 260px; }
-  }
-
-  /* ---------- Avatar panel (placeholder slot) ---------- */
-  .avatar-panel {
-    background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg) 100%);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 28px;
-    position: relative;
-  }
-
-  .eyebrow {
-    position: absolute;
-    top: 28px;
-    left: 28px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-
-  .orb-wrap {
-    position: relative;
-    width: 180px;
-    height: 180px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .orb {
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, var(--accent) 0%, #c97a4a 55%, #8a4a35 100%);
-    box-shadow: 0 0 60px 10px var(--accent-soft);
-    animation: breathe 4.5s ease-in-out infinite;
-    transition: background 0.8s ease, box-shadow 0.8s ease;
-  }
-
-  .orb.state-calm {
-    background: radial-gradient(circle at 35% 30%, var(--sage) 0%, #5f9678 55%, #3d6650 100%);
-    box-shadow: 0 0 60px 10px var(--sage-soft);
-  }
-
-  .orb.state-thinking {
-    animation: breathe 1.6s ease-in-out infinite;
-  }
-
-  @keyframes breathe {
-    0%, 100% { transform: scale(1); opacity: 0.92; }
-    50% { transform: scale(1.08); opacity: 1; }
-  }
-
-  .avatar-caption {
-    margin-top: 28px;
-    text-align: center;
-  }
-
-  .avatar-caption h2 {
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-size: 22px;
-    margin: 0 0 6px;
-  }
-
-  .avatar-caption p {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  .avatar-slot-badge {
-    margin-top: 22px;
-    padding: 7px 14px;
-    border: 1px dashed var(--border);
-    border-radius: 100px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-  }
-
-  .status-line {
-    position: absolute;
-    bottom: 28px;
-    left: 28px;
-    right: 28px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--sage);
-  }
-  .status-dot.offline { background: var(--coral); }
-
-  /* ---------- Chat panel ---------- */
-  .chat-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
-
-  .chat-header {
-    padding: 28px 32px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .chat-header h1 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 26px;
-    margin: 0 0 4px;
-    letter-spacing: -0.01em;
-  }
-
-  .chat-header p {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 14px;
-  }
-
-  .messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 28px 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-
-  .msg {
-    max-width: 78%;
-    padding: 13px 16px;
-    border-radius: 16px;
-    font-size: 14.5px;
-    line-height: 1.55;
-  }
-
-  .msg.user {
-    align-self: flex-end;
-    background: var(--accent);
-    color: #23180d;
-    border-bottom-right-radius: 4px;
-  }
-
-  .msg.nova {
-    align-self: flex-start;
-    background: var(--bg-panel-2);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 4px;
-  }
-
-  .msg.system-note {
-    align-self: center;
-    background: transparent;
-    border: 1px dashed var(--border);
-    color: var(--text-muted);
-    font-size: 12.5px;
-    font-family: var(--font-mono);
-    text-align: center;
-  }
-
-  .msg-tag {
-    display: inline-block;
-    margin-top: 8px;
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-    text-transform: uppercase;
-  }
-
-  .empty-state {
-    margin: auto;
-    text-align: center;
-    color: var(--text-muted);
-    max-width: 360px;
-  }
-
-  .empty-state h3 {
-    font-family: var(--font-display);
-    font-weight: 500;
-    color: var(--text);
-    font-size: 18px;
-    margin-bottom: 8px;
-  }
-
-  .empty-state p { font-size: 13.5px; line-height: 1.6; }
-
-  .suggestions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-    margin-top: 16px;
-  }
-
-  .suggestion-chip {
-    font-size: 12.5px;
-    padding: 7px 12px;
-    border-radius: 100px;
-    border: 1px solid var(--border);
-    background: var(--bg-panel);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-  }
-  .suggestion-chip:hover { border-color: var(--accent); color: var(--text); }
-
-  .composer {
-    padding: 18px 32px 26px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-  }
-
-  .composer textarea {
-    flex: 1;
-    resize: none;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 13px 16px;
-    color: var(--text);
-    font-family: var(--font-body);
-    font-size: 14.5px;
-    line-height: 1.5;
-    max-height: 120px;
-  }
-
-  .composer textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .composer button {
-    background: var(--accent);
-    color: #23180d;
-    border: none;
-    border-radius: 14px;
-    padding: 0 22px;
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 14px;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
-
-  .composer button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .composer button:focus-visible,
-  .suggestion-chip:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  #mic-btn {
-    background: var(--bg-panel);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    width: 46px;
-    flex-shrink: 0;
-    font-size: 18px;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s;
-  }
-  #mic-btn:hover { border-color: var(--accent); }
-
-  #mic-btn.recording {
-    background: var(--coral);
-    border-color: var(--coral);
-    animation: pulse-rec 1.2s ease-in-out infinite;
-  }
-
-  #mic-btn.processing {
-    opacity: 0.6;
-    cursor: not-allowed;
-    animation: none;
-  }
-
-  @keyframes pulse-rec {
-    0%, 100% { box-shadow: 0 0 0 0 #e08a7d55; }
-    50% { box-shadow: 0 0 0 8px #e08a7d00; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .orb { animation: none; }
-  }
-
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="app">
 
-  <!-- Avatar / digital-human slot — placeholder for now -->
+  <!-- Avatar / digital-human slot -->
   <div class="avatar-panel">
     <div class="eyebrow">Nova</div>
 
-    <div class="orb-wrap">
+    <div class="orb-wrap" id="orb-wrap">
       <div class="orb" id="orb"></div>
+      <canvas id="avatar-canvas" style="display:none; width:100%; height:100%;"></canvas>
     </div>
 
     <div class="avatar-caption">
@@ -415,6 +65,309 @@
 
 </div>
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+  import * as THREE from "three";
+  import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+  const API_BASE_URL = "http://localhost:8000";
+  const canvas = document.getElementById("avatar-canvas");
+  const orbEl = document.getElementById("orb");
+  const orbWrap = document.getElementById("orb-wrap");
+  const badgeEl = document.getElementById("avatar-badge");
+
+  let mixer = null;
+  let clock = new THREE.Clock();
+  let modelRoot = null;
+  let idleSpeed = 1;
+
+  // ---------- Mouth rig (set once the model loads, used every frame) ----------
+  let mouthMorphMesh = null;   // the mesh that owns the mouth blendshapes
+  let mouthMorphIndex = null;  // index of the "jawOpen" (or similar) morph target
+  let mouthFunnelIndex = null; // optional secondary shape for a rounder mouth
+  let jawBone = null;          // fallback if no morph targets exist
+
+  const MORPH_NAME_CANDIDATES = [
+    "jawOpen", "mouthOpen", "viseme_aa", "mouth_open", "MouthOpen", "A"
+  ];
+
+  // ---------- Blink rig ----------
+  let blinkMesh = null;
+  let eyeBlinkLeftIndex = null;
+  let eyeBlinkRightIndex = null;
+  let nextBlinkTime = 0;
+  let blinkProgress = 0; // 0 = eyes open, 1 = fully closed
+  let isBlinking = false;
+
+  // ---------- Audio-driven mouth animation ----------
+  let audioCtx = null;
+  let analyser = null;
+  let talkingAudioEl = null;
+
+  function playAvatarAudio(base64Audio) {
+    if (!base64Audio) return;
+
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (talkingAudioEl) {
+      talkingAudioEl.pause();
+    }
+
+    talkingAudioEl = new Audio(`data:audio/wav;base64,${base64Audio}`);
+
+    try {
+      const source = audioCtx.createMediaElementSource(talkingAudioEl);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+    } catch (err) {
+      // If routing through the analyser fails for any reason, still
+      // let the audio play - just without mouth-sync.
+      analyser = null;
+      console.warn("Audio analyser setup failed, playing without lip-sync:", err);
+    }
+
+    talkingAudioEl.play().catch(() => {
+      // Autoplay blocked - the 🔊 Replay button (see main script) is
+      // the fallback the student can click manually.
+    });
+  }
+  function setMouthOpenAmount(amount) {
+    if (mouthMorphMesh && mouthMorphIndex !== null) {
+      mouthMorphMesh.morphTargetInfluences[mouthMorphIndex] = amount;
+      if (mouthFunnelIndex !== null) {
+        mouthMorphMesh.morphTargetInfluences[mouthFunnelIndex] = amount * 0.3;
+      }
+    } else if (jawBone) {
+      jawBone.rotation.x = amount * 0.25;
+    }
+  }
+
+  function updateMouthFromAudio() {
+    if (!analyser || !talkingAudioEl || talkingAudioEl.paused) {
+      setMouthOpenAmount(0);
+      return;
+    }
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteTimeDomainData(data);
+
+    let sumSquares = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sumSquares += v * v;
+    }
+    const rms = Math.sqrt(sumSquares / data.length);
+    const openAmount = Math.min(1, rms * 4);
+
+    setMouthOpenAmount(openAmount);
+  }
+
+  // Randomized, natural-feeling blinking - not a fixed interval, so
+  // it doesn't look mechanical. Each blink is a fast close-then-open
+  // (~150ms), followed by a random 2-6 second gap before the next one.
+  function updateBlink(elapsedTime) {
+    if (!blinkMesh) return;
+
+    if (!isBlinking && elapsedTime >= nextBlinkTime) {
+      isBlinking = true;
+      blinkProgress = 0;
+    }
+
+    if (isBlinking) {
+      blinkProgress += 0.18;
+      const closeAmount = blinkProgress <= 1
+        ? Math.sin(Math.min(blinkProgress, 1) * Math.PI)
+        : 0;
+
+      blinkMesh.morphTargetInfluences[eyeBlinkLeftIndex] = closeAmount;
+      blinkMesh.morphTargetInfluences[eyeBlinkRightIndex] = closeAmount;
+
+      if (blinkProgress >= 1) {
+        isBlinking = false;
+        nextBlinkTime = elapsedTime + 2 + Math.random() * 4;
+      }
+    }
+  }
+
+  function initAvatar() {
+    const width = orbWrap.clientWidth;
+    const height = orbWrap.clientHeight;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
+    camera.position.set(0, 1.4, 3);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    const key = new THREE.DirectionalLight(0xf0a860, 1.1);
+    key.position.set(2, 3, 2);
+    const rim = new THREE.DirectionalLight(0x8fc0a3, 0.5);
+    rim.position.set(-2, 1, -2);
+    scene.add(ambient, key, rim);
+
+    // ─── THE SWITCH ───────────────────────────────────────────────
+    // true  = drag mode: rotate/zoom with the mouse to find a shot
+    // false = locked mode: mouse does nothing, camera stays fixed
+    const ENABLE_DRAG_CONTROLS = false;
+
+    const CAMERA_POSITION = [0.0044516958106814, 7.65773052675029, 3.8669779420132415];
+    const CAMERA_TARGET = [0.0044516958106866, 7.461967914898937, -0.045037813552561534];
+    // ───────────────────────────────────────────────────────────────
+
+    const loader = new GLTFLoader();
+    loader.load(
+      `${API_BASE_URL}/static/avatar/guytest.glb`,
+      (gltf) => {
+        modelRoot = gltf.scene;
+        scene.add(modelRoot);
+
+        // Find the mouth rig and blink rig once, up front.
+        modelRoot.traverse((obj) => {
+          if (!mouthMorphMesh && obj.isMesh && obj.morphTargetDictionary) {
+            for (const name of MORPH_NAME_CANDIDATES) {
+              if (name in obj.morphTargetDictionary) {
+                mouthMorphMesh = obj;
+                mouthMorphIndex = obj.morphTargetDictionary[name];
+                if ("mouthFunnel" in obj.morphTargetDictionary) {
+                  mouthFunnelIndex = obj.morphTargetDictionary["mouthFunnel"];
+                }
+                console.log("Using morph target for mouth:", name);
+                break;
+              }
+            }
+          }
+          if (!mouthMorphMesh && !jawBone && obj.isBone && /jaw/i.test(obj.name)) {
+            jawBone = obj;
+            console.log("Using jaw bone for mouth:", obj.name);
+          }
+          if (!blinkMesh && obj.isMesh && obj.morphTargetDictionary) {
+            if ("eyeBlinkLeft" in obj.morphTargetDictionary && "eyeBlinkRight" in obj.morphTargetDictionary) {
+              blinkMesh = obj;
+              eyeBlinkLeftIndex = obj.morphTargetDictionary["eyeBlinkLeft"];
+              eyeBlinkRightIndex = obj.morphTargetDictionary["eyeBlinkRight"];
+              console.log("Found blink targets on", obj.name);
+            }
+          }
+        });
+        if (!mouthMorphMesh && !jawBone) {
+          console.warn("No mouth rig found on this model - mouth will not animate.");
+        }
+        if (!blinkMesh) {
+          console.warn("No blink targets found on this model - eyes will not blink.");
+        } else {
+          // Schedule the very first blink a couple seconds after load,
+          // not instantly.
+          nextBlinkTime = clock.getElapsedTime() + 2 + Math.random() * 3;
+        }
+
+        let box = new THREE.Box3().setFromObject(modelRoot);
+        let size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        modelRoot.scale.setScalar(1.8 / maxDim);
+
+        box = new THREE.Box3().setFromObject(modelRoot);
+        const center = box.getCenter(new THREE.Vector3());
+        modelRoot.position.x -= center.x;
+        modelRoot.position.z -= center.z;
+        modelRoot.position.y -= box.min.y;
+
+        box = new THREE.Box3().setFromObject(modelRoot);
+        const sphere = box.getBoundingSphere(new THREE.Sphere());
+        camera.near = 0.01;
+
+        if (gltf.animations && gltf.animations.length > 0) {
+          mixer = new THREE.AnimationMixer(modelRoot);
+          const idleClip = gltf.animations.find(a => /idle/i.test(a.name)) || gltf.animations[0];
+          mixer.clipAction(idleClip).play();
+        }
+
+        orbEl.style.display = "none";
+        canvas.style.display = "block";
+        if (badgeEl) badgeEl.style.display = "none";
+
+        if (ENABLE_DRAG_CONTROLS) {
+          const startDist = sphere.radius * 3;
+          camera.position.set(0, sphere.center.y, startDist);
+          camera.lookAt(0, sphere.center.y, 0);
+          camera.updateProjectionMatrix();
+
+          import("three/addons/controls/OrbitControls.js").then(({ OrbitControls }) => {
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, sphere.center.y, 0);
+            controls.minDistance = sphere.radius * 0.3;
+            controls.maxDistance = sphere.radius * 6;
+            controls.update();
+
+            window.addEventListener("keydown", (e) => {
+              if (e.key === "p") {
+                console.log("CAMERA_POSITION =", camera.position.toArray());
+                console.log("CAMERA_TARGET =", controls.target.toArray());
+              }
+            });
+
+            function controlsLoop() {
+              requestAnimationFrame(controlsLoop);
+              controls.update();
+            }
+            controlsLoop();
+          });
+        } else {
+          camera.position.set(...CAMERA_POSITION);
+          camera.lookAt(...CAMERA_TARGET);
+          camera.updateProjectionMatrix();
+        }
+
+        animate();
+      },
+      undefined,
+      (err) => {
+        console.warn("Avatar model failed to load, falling back to orb:", err);
+      }
+    );
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      if (mixer) mixer.update(delta * idleSpeed);
+      updateMouthFromAudio();
+      updateBlink(clock.getElapsedTime());
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      const w = orbWrap.clientWidth;
+      const h = orbWrap.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+  }
+
+  initAvatar();
+
+  // Exposed for the main script below (which is NOT a module, so it
+  // can't `import` these directly) to nudge idle animation speed and
+  // to trigger lip-synced audio playback from one shared function.
+  window.setAvatarThinking = (isThinking) => {
+    idleSpeed = isThinking ? 2.2 : 1;
+  };
+  window.playAvatarAudio = playAvatarAudio;
+</script>
+
 <script>
   // Point this at your running backend. Defaults to local dev.
   const API_BASE_URL = "http://localhost:8000";
@@ -431,9 +384,6 @@
 
   // ---------- Language ----------
   let currentLanguage = localStorage.getItem("nova_language") || "en";
-  // Tracks connection state independently of language, so switching
-  // languages re-renders the CURRENT status in the new language
-  // instead of freezing whatever text was last set by checkHealth().
   let connectionState = "checking"; // "checking" | "connected" | "offline"
 
   const TRANSLATIONS = {
@@ -503,8 +453,6 @@
     document.getElementById("avatar-desc").innerHTML = t.avatarDesc;
     document.getElementById("avatar-badge").textContent = t.avatarBadge;
 
-    // The empty-state block gets removed from the DOM after the first
-    // message is sent (see addMessage) - only touch it if it's still there.
     const emptyTitleEl = document.getElementById("empty-title");
     if (emptyTitleEl) {
       emptyTitleEl.textContent = t.emptyTitle;
@@ -535,9 +483,6 @@
 
   applyLanguage();
 
-  // Anonymous per-browser identifier for voice sessions (matches the
-  // no-login-needed design of the rest of the backend). Persisted in
-  // localStorage so it's stable across page reloads, not just per tab.
   function getSessionId() {
     let id = localStorage.getItem("nova_session_id");
     if (!id) {
@@ -547,7 +492,6 @@
     return id;
   }
 
-  // Maps backend-inferred emotion -> orb visual state.
   const CALM_EMOTIONS = new Set(["neutral", "hopeful"]);
 
   function setOrbState(emotion) {
@@ -559,6 +503,7 @@
 
   function setThinking(isThinking) {
     orb.classList.toggle("state-thinking", isThinking);
+    if (window.setAvatarThinking) window.setAvatarThinking(isThinking);
   }
 
   function addMessage(role, text, tag) {
@@ -596,27 +541,74 @@
     renderStatus();
   }
 
-  // Shared between typed and voice replies, so both look/behave the
-  // same way once a reply comes back from the backend.
-  // `audioBase64` is only present for voice replies - when given, a
-  // small 🔊 replay button is attached to the bubble, since browsers
-  // can silently block autoplay after an async round trip even though
-  // the recording itself started from a real click.
+  // ---------- RL feedback (thumbs up/down) ----------
+  function addFeedbackButtons(bubble, feedbackId) {
+    const row = document.createElement("div");
+    row.className = "feedback-row";
+
+    const upBtn = document.createElement("button");
+    upBtn.className = "feedback-btn";
+    upBtn.textContent = "👍";
+    upBtn.setAttribute("aria-label", "This was helpful");
+
+    const downBtn = document.createElement("button");
+    downBtn.className = "feedback-btn";
+    downBtn.textContent = "👎";
+    downBtn.setAttribute("aria-label", "This wasn't helpful");
+
+    upBtn.addEventListener("click", () => sendFeedback(feedbackId, true, upBtn, downBtn));
+    downBtn.addEventListener("click", () => sendFeedback(feedbackId, false, downBtn, upBtn));
+
+    row.appendChild(upBtn);
+    row.appendChild(downBtn);
+    bubble.appendChild(row);
+  }
+
+  async function sendFeedback(feedbackId, helpful, clickedBtn, otherBtn) {
+    clickedBtn.disabled = true;
+    otherBtn.disabled = true;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/feedback/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback_id: feedbackId, helpful }),
+      });
+
+      if (!res.ok) throw new Error(`Server responded ${res.status}`);
+
+      clickedBtn.classList.add("selected", helpful ? "up" : "down");
+    } catch (err) {
+      clickedBtn.disabled = false;
+      otherBtn.disabled = false;
+    }
+  }
+
+  // audioBase64 (2nd arg) is only present for VOICE replies, passed in
+  // directly by sendVoiceMessage. Typed replies carry their audio
+  // inside data.audio_base64 instead - both paths are normalized to
+  // the same variable below so the rest of the function doesn't care
+  // which one it came from.
   function renderNovaReply(data, audioBase64) {
     const tag = data.emotion
       ? `${data.emotion} · ${data.stress_type || "general"}`
       : null;
 
     const bubble = addMessage("nova", data.reply, tag);
+    const resolvedAudio = audioBase64 || data.audio_base64 || null;
 
-    if (audioBase64) {
+    if (resolvedAudio) {
       const playBtn = document.createElement("button");
       playBtn.textContent = "🔊 Replay";
       playBtn.style.cssText =
         "margin-top:8px;display:block;background:none;border:1px solid var(--border);" +
         "color:var(--text-muted);border-radius:100px;padding:4px 10px;font-size:11px;cursor:pointer;";
-      playBtn.addEventListener("click", () => playBase64Wav(audioBase64));
+      playBtn.addEventListener("click", () => playBase64Wav(resolvedAudio));
       bubble.appendChild(playBtn);
+    }
+
+    if (data.feedback_id != null) {
+      addFeedbackButtons(bubble, data.feedback_id);
     }
 
     setOrbState(data.emotion);
@@ -624,14 +616,25 @@
     if (data.risk_flag) {
       addSystemNote("Nova shared some support resources above — please take a look.");
     }
+
+    return resolvedAudio;
   }
 
+  // Routes through the 3D avatar's lip-sync playback when the avatar
+  // has loaded (window.playAvatarAudio, set by the module script
+  // above); falls back to plain playback if the avatar isn't ready
+  // yet or failed to load, so audio still works either way.
   function playBase64Wav(base64Audio) {
     if (!base64Audio) return;
+
+    if (window.playAvatarAudio) {
+      window.playAvatarAudio(base64Audio);
+      return;
+    }
+
     const audio = new Audio(`data:audio/wav;base64,${base64Audio}`);
     audio.play().catch(() => {
-      // Autoplay blocked - the 🔊 Replay button on the bubble is the
-      // fallback, so this isn't worth its own error message.
+      // Autoplay blocked - the 🔊 Replay button is the fallback.
     });
   }
 
@@ -656,7 +659,8 @@
       }
 
       const data = await res.json();
-      renderNovaReply(data);
+      const resolvedAudio = renderNovaReply(data);
+      if (resolvedAudio) playBase64Wav(resolvedAudio);
     } catch (err) {
       addSystemNote(
         "Couldn't reach Nova right now. Make sure the backend is running " +
@@ -685,9 +689,6 @@
     }
 
     audioChunks = [];
-    // webm/opus is what Chrome/Edge record by default - the backend's
-    // faster-whisper decoder handles this format directly, no
-    // conversion needed on either side.
     mediaRecorder = new MediaRecorder(stream);
 
     mediaRecorder.ondataavailable = (e) => {
@@ -742,12 +743,9 @@
         return;
       }
 
-      // Show what was actually heard as the "user" bubble, same as a
-      // typed message, so it's clear to the student what Nova heard
-      // (useful for catching STT mishears too).
       addMessage("user", data.transcript);
-      renderNovaReply(data, data.audio_base64);
-      playBase64Wav(data.audio_base64);
+      const resolvedAudio = renderNovaReply(data, data.audio_base64);
+      if (resolvedAudio) playBase64Wav(resolvedAudio);
 
       if (data.audio_error) {
         addSystemNote("Voice reply text is above, but speech playback failed — check the backend logs.");

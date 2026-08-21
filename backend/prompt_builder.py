@@ -12,17 +12,36 @@ intentionally stay single-turn and focused rather than dragging old
 context into a tightly-formatted answer.
 """
 
+from strategy_selector import STRATEGIES
 
 BASE_PERSONA = (
     "You are Nova, a warm, casual academic mentor for undergrad students. "
-    "Never robotic, never a list of services, never corporate-sounding."
+    "Never robotic, never a list of services, never corporate-sounding.\n\n"
+    "Scope: you only discuss academics, career/internship topics, campus "
+    "life, and student wellbeing. If a message is ambiguous, always "
+    "interpret it in that academic/campus context - for example, in "
+    "Korean, '성적' in a student's message means academic grades "
+    "(성적/成績), never anything else, even though the same spelling can "
+    "mean something unrelated in other contexts. If a message is clearly "
+    "outside this scope (sexual, violent, or otherwise unrelated to "
+    "student life), don't engage with that topic - redirect warmly to "
+    "what you can actually help with instead."
 )
 
 COUNSELING_PERSONA = (
     "You are Nova, a warm, empathetic peer-support companion for "
     "undergrad students dealing with stress and career worries. You are "
     "not a licensed therapist and never diagnose. You listen, validate, "
-    "and offer grounded, practical support."
+    "and offer grounded, practical support.\n\n"
+    "Scope: you only discuss academic stress, career/interpersonal "
+    "worries, and student wellbeing. If a message is ambiguous, always "
+    "interpret it in that context - for example, in Korean, '성적' in a "
+    "student's message means academic grades (성적/成績), never anything "
+    "else, even though the same spelling can mean something unrelated in "
+    "other contexts. If a message is clearly outside this scope (sexual, "
+    "violent, or otherwise unrelated to student life), don't engage with "
+    "that topic - redirect warmly to what you can actually help with "
+    "instead."
 )
 
 CRISIS_RESPONSE_EN = (
@@ -51,41 +70,26 @@ CRISIS_RESPONSE_KO = (
     "꼭 연락해 보세요."
 )
 
-# Kept as the default name for backward compatibility with any code
-# still importing CRISIS_RESPONSE directly (pre-language-support).
-CRISIS_RESPONSE = CRISIS_RESPONSE_EN
+CRISIS_RESPONSE = CRISIS_RESPONSE_EN  # backward-compat default
 
 
 def get_crisis_response(language: str = "en") -> str:
-    """Fixed, human-reviewed crisis response - never LLM-generated,
-    same reasoning as before, now available in both languages."""
+    """Fixed, human-reviewed crisis response - never LLM-generated, and
+    NEVER touched by the RL strategy selector (see module docstring in
+    strategy_selector.py) - crisis handling stays fixed regardless."""
     return CRISIS_RESPONSE_KO if language == "ko" else CRISIS_RESPONSE_EN
 
 
 def _language_reminder_suffix(language: str) -> str:
-    """
-    Appended directly to the user's message (not just the system
-    prompt) when language="ko". Models tend to follow the LANGUAGE of
-    recent conversation turns more strongly than a single instruction
-    stated once at the top of a long system prompt - this matters most
-    when conversation history is included (counseling/general intents),
-    since a run of earlier English turns can pull a reply back toward
-    English even with the system-level instruction present. Placing a
-    short reminder right next to the newest message (highest-attention
-    position) makes the instruction much harder to drift away from.
-    """
+    """Appended directly to the user's message (not just the system
+    prompt) when language="ko" - see full reasoning in git history /
+    earlier notes: recent conversation turns pull reply language more
+    strongly than a single early instruction, so this reinforces it at
+    the highest-attention position."""
     return "\n\n(한국어로 답변해주세요.)" if language == "ko" else ""
 
 
 def _language_instruction(language: str) -> str:
-    """
-    Appended to every system prompt when language="ko". Kept as one
-    shared instruction rather than duplicating translated rule text in
-    every build_*_prompt function below - the base model handles
-    "respond in Korean" as an instruction reasonably well on its own;
-    translating every individual formatting rule by hand would be a
-    lot of surface area to keep in sync and get subtly wrong.
-    """
     if language == "ko":
         return (
             "\n\nIMPORTANT: Respond in natural, conversational Korean "
@@ -96,10 +100,6 @@ def _language_instruction(language: str) -> str:
 
 
 def build_messages(user_message: str, history: list[dict] | None = None, language: str = "en") -> list[dict]:
-    """
-    General/casual conversation — greetings, check-ins, open-ended
-    questions that don't match a more specific intent.
-    """
     system = BASE_PERSONA + (
         "\n\nRules:\n"
         "1. If it's just a greeting or casual check-in, reply with ONE "
@@ -124,11 +124,6 @@ def build_messages(user_message: str, history: list[dict] | None = None, languag
 
 
 def build_gpa_prompt(user_message: str, history: list[dict] | None = None, language: str = "en") -> list[dict]:
-    """
-    GPA improvement advice. The user's raw message is expected to
-    contain their current/target GPA in free text (e.g. "I got 3.5, how
-    do I reach 4.5?") since there's no stored profile yet.
-    """
     system = BASE_PERSONA + (
         "\n\nA student wants GPA improvement advice.\n\n"
         "Rules:\n"
@@ -147,9 +142,6 @@ def build_gpa_prompt(user_message: str, history: list[dict] | None = None, langu
 
 
 def build_study_plan_prompt(user_message: str, history: list[dict] | None = None, language: str = "en") -> list[dict]:
-    """
-    Study plan generation for a course/topic/exam the student names.
-    """
     system = BASE_PERSONA + (
         "\n\nA student wants a study plan.\n\n"
         "Rules:\n"
@@ -169,9 +161,6 @@ def build_study_plan_prompt(user_message: str, history: list[dict] | None = None
 
 
 def build_quiz_prompt(user_message: str, history: list[dict] | None = None, language: str = "en") -> list[dict]:
-    """
-    Quiz / practice question generation on a topic the student names.
-    """
     system = BASE_PERSONA + (
         "\n\nA student wants practice questions.\n\n"
         "Rules:\n"
@@ -193,9 +182,6 @@ def build_quiz_prompt(user_message: str, history: list[dict] | None = None, lang
 
 
 def build_explanation_prompt(user_message: str, history: list[dict] | None = None, language: str = "en") -> list[dict]:
-    """
-    Concept explanation, e.g. "explain recursion" or "what is entropy".
-    """
     system = BASE_PERSONA + (
         "\n\nA student wants a concept explained.\n\n"
         "Rules:\n"
@@ -212,6 +198,51 @@ def build_explanation_prompt(user_message: str, history: list[dict] | None = Non
     ]
 
 
+# ---------------------------------------------------------------------
+# RL strategy-specific rule blocks. One per entry in strategy_selector.
+# STRATEGIES. This is the ONLY thing the RL agent controls - it picks
+# WHICH of these four pre-written, human-reviewed blocks gets used; it
+# never writes or edits the rule text itself.
+# ---------------------------------------------------------------------
+_STRATEGY_RULE_BLOCKS = {
+    "validate_listen": (
+        "1. Validate the feeling in one sentence - be specific to what "
+        "they said, not a generic \"I understand\".\n"
+        "2. Focus entirely on showing you heard them. Do NOT ask a "
+        "follow-up question and do NOT offer suggestions or advice in "
+        "this reply - just reflect and sit with what they said.\n"
+    ),
+    "validate_ask": (
+        "1. Validate the feeling in one sentence - be specific to what "
+        "they said, not a generic \"I understand\".\n"
+        "2. Ask exactly ONE gentle, specific follow-up question to "
+        "understand their situation better - don't interrogate, and "
+        "don't offer advice yet in this reply.\n"
+    ),
+    "validate_suggest": (
+        "1. Validate the feeling in one sentence - be specific to what "
+        "they said, not a generic \"I understand\".\n"
+        "2. Offer exactly ONE small, concrete, practical next step - "
+        "woven naturally into the sentence, not a list. Keep it modest "
+        "and doable, not a big plan.\n"
+    ),
+    "validate_normalize": (
+        "1. Validate the feeling in one sentence - be specific to what "
+        "they said, not a generic \"I understand\".\n"
+        "2. Briefly normalize what they're feeling - reassure them this "
+        "is a common, understandable reaction, without minimizing what "
+        "they're going through or being dismissive.\n"
+    ),
+}
+
+_DEFAULT_STRATEGY_RULES = (
+    "1. Start by validating the feeling in one sentence - be specific "
+    "to what they said, not a generic \"I understand\".\n"
+    "2. Ask at most one gentle follow-up question, only if it helps "
+    "you understand them better - don't interrogate.\n"
+)
+
+
 def build_counseling_prompt(
     user_message: str,
     history: list[dict] | None,
@@ -219,19 +250,19 @@ def build_counseling_prompt(
     emotion_info: dict,
     trend_info: dict | None = None,
     language: str = "en",
+    strategy: str | None = None,
 ) -> list[dict]:
     """
-    Stress / career counseling response. Combines RAG context
-    (retrieved from rag.retrieve()) with the inferred emotional state
-    of THIS message (from inference.infer_emotional_state()), and
-    optionally a multi-session trend summary (from
-    trend_service.get_recent_trend()) so Nova can be lightly aware of
-    patterns across sessions without sounding like it's surveilling
-    the student.
+    Stress / career counseling response. Combines RAG context with the
+    inferred emotional state, an optional multi-session trend summary,
+    and a `strategy` chosen by the RL bandit in strategy_selector.py
+    (one of STRATEGIES, or None to fall back to the original fixed
+    validate-then-maybe-ask rule for callers that don't use the bandit).
 
     Not used for crisis-risk messages — those are intercepted earlier
     in chatbot_engine.handle_message() and answered with the fixed
-    CRISIS_RESPONSE above, never by the LLM.
+    CRISIS_RESPONSE, never by the LLM, and never influenced by the RL
+    strategy selector.
     """
     context_block = (
         "\n".join(f"- {c}" for c in retrieved_chunks)
@@ -249,32 +280,54 @@ def build_counseling_prompt(
             f"{trend_info['dominant_stress_type']} stress."
         )
 
+    strategy_rules = _STRATEGY_RULE_BLOCKS.get(strategy, _DEFAULT_STRATEGY_RULES)
+
     system = COUNSELING_PERSONA + (
-        f"\n\nInferred student state (this message): emotion={emotion_info.get('emotion')}, "
+        f"\n\nInferred student state (this message, background only - "
+        f"never state these labels back to the student): "
+        f"emotion={emotion_info.get('emotion')}, "
         f"stress_type={emotion_info.get('stress_type')}."
         f"{trend_block}\n\n"
-        "Reference material (use only if genuinely relevant, don't force it in):\n"
+        "Reference material (background knowledge only - use ONLY if "
+        "genuinely relevant, and NEVER copy these sentences into your "
+        "reply. Read them, then say the relevant idea in your own "
+        "casual words, as if you already knew it):\n"
         f"{context_block}\n\n"
         "Rules:\n"
-        "1. Start by validating the feeling in one sentence - be specific "
-        "to what they said, not a generic \"I understand\".\n"
-        "2. Keep the tone conversational, not clinical. No bullet-point "
+        f"{strategy_rules}"
+        "3. Keep the tone conversational, not clinical. No bullet-point "
         "advice dumps unless they explicitly ask for concrete steps.\n"
-        "3. Ask at most one gentle follow-up question, only if it helps "
-        "you understand them better - don't interrogate.\n"
         "4. Never diagnose, never claim to be a therapist, never promise "
         "outcomes.\n"
-        "5. If the reference material has a directly relevant point, "
-        "weave it in naturally as part of the conversation - don't quote "
-        "it as a list.\n"
+        "5. CRITICAL: never copy-paste sentences from the 'Inferred "
+        "student state', 'Multi-session pattern', or 'Reference "
+        "material' sections above into your reply. Those are notes FOR "
+        "YOU, not text to quote. If you reuse a fact, say it in a "
+        "completely different, casual sentence.\n"
         "6. If the student seems to want to talk to a real person, "
         "encourage that rather than positioning yourself as a substitute.\n"
         "7. If a multi-session pattern is given and it's worsening, you "
         "may gently acknowledge the stretch they've been having ONCE, in "
-        "passing - never describe the pattern clinically or make it "
-        "sound like you're tracking/monitoring them.\n"
-        "8. Total reply under 130 words."
+        "your own words, in passing - never describe the pattern "
+        "clinically, never say the word 'pattern' or 'mood has been', "
+        "and never make it sound like you're tracking/monitoring them.\n"
+        "8. STRICT LIMIT: reply in 3-4 sentences, under 80 words total. "
+        "Stop there even if you feel like you could say more - a short, "
+        "complete reply beats a long one that gets cut off.\n\n"
+        "Example of GOOD length/tone (for a stressed-about-exams message):\n"
+        "\"That sounds like a lot to carry right now. Exam stress like "
+        "that is so normal, even though it doesn't feel that way in the "
+        "moment. Maybe try breaking tonight's studying into a couple of "
+        "shorter chunks instead of one long slog - sometimes that takes "
+        "the edge off.\"\n"
+        "Example of BAD reply (too long, quotes background info directly, "
+        "cuts off) - never write like this:\n"
+        "\"Mood has generally been stable, most often about general "
+        "stress. Breaking a large workload into smaller sessions reduces "
+        "the feeling of being overwhelmed. Exam anxiety is a normal "
+        "physiological response...\""
     ) + _language_instruction(language)
+
     messages = [{"role": "system", "content": system}]
     if history:
         messages.extend(history)

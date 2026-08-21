@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 import chatbot_engine
 import trend_service
-from models import ChatHistory, EmotionLog, User
+from models import ChatHistory, EmotionLog, StrategyLog, User
 from config import DEMO_USER_ID, DEMO_USER_EMAIL, DEMO_USER_NAME
 
 
@@ -69,14 +69,17 @@ def _recent_history(db: Session, user_id: int, limit: int = 6) -> list[dict]:
 
 def get_chat_reply(db: Session, user_id: int, message: str, language: str = "en") -> dict:
     history = _recent_history(db, user_id)
-    result = chatbot_engine.handle_message(message, history, language=language)  # ← add language=language
+    result = chatbot_engine.handle_message(message, history, language=language)
     ...
+
 
 def get_counseling_reply(db: Session, user_id: int, message: str, language: str = "en") -> dict:
     history = _recent_history(db, user_id)
     trend_info = trend_service.get_recent_trend(db, user_id)
-    result = chatbot_engine.handle_message(message, history, trend_info, language=language)  # ← add language=language
-    ...
+    result = chatbot_engine.handle_message(message, history, trend_info, language=language)
+
+    feedback_id = None
+
     if not result["error"]:
         chat_row = ChatHistory(user_id=user_id, message=message, reply=result["response"])
         db.add(chat_row)
@@ -91,6 +94,23 @@ def get_counseling_reply(db: Session, user_id: int, message: str, language: str 
                 stress_type=emotion_info.get("stress_type", "general"),
                 risk_flag=1 if emotion_info.get("risk") else 0,
             ))
+
+        # Only log a strategy row when the bandit actually ran for this
+        # turn — crisis messages never touch the bandit, so result won't
+        # have a "strategy" key on those turns, and emotion_info may be
+        # absent too. Guard on both rather than assuming presence.
+        strategy = result.get("strategy")
+        if strategy and emotion_info:
+            strategy_log = StrategyLog(
+                chat_history_id=chat_row.id,
+                emotion=emotion_info.get("emotion", "neutral"),
+                stress_type=emotion_info.get("stress_type", "general"),
+                strategy=strategy,
+            )
+            db.add(strategy_log)
+            db.flush()  # assigns strategy_log.id
+            feedback_id = strategy_log.id
+
         db.commit()
 
     emotion_info = result.get("emotion") or {}
@@ -99,6 +119,7 @@ def get_counseling_reply(db: Session, user_id: int, message: str, language: str 
         "emotion": emotion_info.get("emotion"),
         "stress_type": emotion_info.get("stress_type"),
         "risk_flag": bool(emotion_info.get("risk")),
+        "feedback_id": feedback_id,
     }
 
 

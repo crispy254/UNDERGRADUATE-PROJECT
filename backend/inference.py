@@ -16,6 +16,28 @@ before infer_emotional_state() in chatbot_engine.py, so a crisis-risk
 message always short-circuits into a fixed, human-reviewed resource
 response (see prompt_builder.CRISIS_RESPONSE) instead of going through
 the LLM.
+
+CRISIS_PATTERNS coverage note
+-------------------------------
+A real message - "hey am stressed i wanan die" - slipped past every
+pattern here because "wanan" is a typo for "wanna"/"want to", and the
+old patterns only matched the exact phrase "want to die". Since this
+gate is the ONLY thing standing between a self-harm message and the
+normal LLM/RL pipeline (see chatbot_engine.handle_message - RL and the
+LLM never even see a message that's correctly caught here), a single
+missed spelling variant is a real safety gap, not a minor miss.
+
+Patterns below are broadened accordingly - some deliberately trade
+precision for recall (e.g. the generic first-person + "die" catch-all
+near the bottom of CRISIS_PATTERNS). Over-triggering here just shows
+crisis resources to someone who wasn't in crisis, which is a mild
+false positive; under-triggering lets a real crisis message reach the
+LLM/RL path uncaught, which is the failure mode to design against.
+
+Per the original file's own guidance, this list should still be
+reviewed periodically by a real person (e.g. a counseling-center
+advisor), not just expanded ad hoc by pattern-matching against one bug
+report - treat this update as a first pass, not a final audit.
 """
 import re
 from typing import Dict, List, Optional
@@ -27,8 +49,23 @@ from typing import Dict, List, Optional
 # here, so lean broad.
 CRISIS_PATTERNS = [
     r"\bkill myself\b", r"\bend my life\b", r"\bend it all\b",
-    r"\bsuicid\w*", r"\bwant to die\b", r"\bdon'?t want to (be alive|live)\b",
-    r"\bno reason to live\b", r"\bhurt myself\b", r"\bself[- ]?harm\b",
+    r"\bsuicid\w*", r"\bhurt myself\b", r"\bself[- ]?harm\b",
+    r"\bno reason to live\b", r"\bdon'?t want to (be alive|live)\b",
+
+    # Broadened "want(a)/wan- (to) die" - catches "want to die",
+    # "wanna die", "wana die", and the specific typo "wanan die" that
+    # slipped through before. \w* after "wan" absorbs any spelling
+    # variant of want/wanna/wanan; the optional "to" handles both
+    # "want to die" and "wanna die" phrasings.
+    r"\bwan\w*\s+(to\s+)?die\b",
+
+    # Deliberately broad safety net: first-person pronoun within a
+    # short window of "die", independent of exact phrasing. This will
+    # occasionally catch hyperbole ("I could die of embarrassment"),
+    # which is an acceptable false-positive rate given the stakes -
+    # see module docstring.
+    r"\b(i|i'?m|me)\b[^.?!]{0,20}\bdie\b",
+
     r"죽고\s*싶", r"자살", r"자해", r"살기\s*싫", r"사라지고\s*싶",
     r"극단적\s*선택",
 ]

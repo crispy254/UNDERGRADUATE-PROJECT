@@ -10,7 +10,10 @@ On startup this:
   1. Creates all DB tables if they don't exist yet (Base.metadata.create_all)
   2. Seeds a demo user (see config.DEMO_USER_ID) so the no-login flow
      always has a valid user_id to attach chats to
-  3. Mounts the chatbot router
+  3. Warm-starts the RL strategy bandit from any historical feedback
+     already in strategy_logs, so it doesn't reset to "no preference"
+     every time the server restarts
+  4. Mounts the chatbot router
 
 Other team members' routers (materials, pastpapers, projects,
 resources, scholarships, upload, users) are mounted too IF their files
@@ -26,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import ALLOWED_ORIGINS, DEMO_USER_ID, DEMO_USER_EMAIL, DEMO_USER_NAME
 from database import Base, engine, SessionLocal
-from models import User
+from models import User, StrategyLog
+import strategy_selector
 
 
 def _seed_demo_user() -> None:
@@ -47,11 +51,32 @@ def _seed_demo_user() -> None:
         db.close()
 
 
+def _warm_start_bandit() -> None:
+    """Replays every historical (context, action, reward) row from
+    strategy_logs into the in-memory bandit, so learned preferences
+    survive a server restart instead of resetting to uniform."""
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(StrategyLog)
+            .filter(StrategyLog.reward.isnot(None))
+            .order_by(StrategyLog.created_at)
+            .all()
+        )
+        n = strategy_selector.warm_start(
+            [(r.emotion, r.stress_type, r.strategy, r.reward) for r in rows]
+        )
+        print(f"[app.py] Warm-started bandit from {n} historical feedback rows")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- startup ---
     Base.metadata.create_all(bind=engine)
     _seed_demo_user()
+    _warm_start_bandit()
     yield
     # --- shutdown --- (nothing to clean up currently)
 
@@ -75,7 +100,9 @@ app.add_middleware(
 # --- Chatbot router (this is the piece built in this project) ---
 from routers.chatbot import router as chatbot_router  # noqa: E402
 app.include_router(chatbot_router)
-
+# --- Feedback / RL router (thumbs-up/down → strategy bandit) ---
+from routers.feedback import router as feedback_router  # noqa: E402
+app.include_router(feedback_router)
 
 # --- Teammates' routers: mounted only if present, so the app still
 # boots without them during development. ---
@@ -110,7 +137,18 @@ def health():
     separate concern (see llm.check_ollama_status for that)."""
     return {"status": "ok"}
 
-#whisper
-from routers import voice
-...
+# --- Voice (Whisper) router ---
+from routers import voice  # noqa: E402
 app.include_router(voice.router)
+from fastapi.staticfiles import StaticFiles
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Static assets (3D avatar model, etc.) ---
+app.mount("/static", StaticFiles(directory="static"), name="static")

@@ -1,5 +1,5 @@
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
  
@@ -97,5 +97,27 @@ class Project(Base):
     github_url = Column(String(255), nullable=True)
     file_path = Column(String(255), nullable=True)
     added_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+ 
+class StrategyLog(Base):
+    """
+    One row per RL strategy decision. `reward` starts NULL (no
+    feedback yet) and gets filled in by POST /feedback once the
+    student clicks thumbs up/down - see routers/feedback.py.
+ 
+    This table is BOTH how the bandit persists across server restarts
+    (replayed via strategy_selector.warm_start() at app startup - see
+    app.py wiring notes) AND the raw data for the evaluation section -
+    every row is one (context, action, reward) sample for computing
+    precision/recall/F1 on strategy selection.
+    """
+    __tablename__ = "strategy_logs"
+ 
+    id = Column(Integer, primary_key=True, index=True)
+    chat_history_id = Column(Integer, ForeignKey("chat_history.id"), nullable=True)
+    emotion = Column(String(50), nullable=False)
+    stress_type = Column(String(50), nullable=False)
+    strategy = Column(String(50), nullable=False)   # one of strategy_selector.STRATEGIES
+    reward = Column(Float, nullable=True)            # NULL until feedback arrives; +1.0 / -1.0 after
     created_at = Column(DateTime, default=datetime.utcnow)
  

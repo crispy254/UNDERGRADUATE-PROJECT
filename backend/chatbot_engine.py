@@ -5,25 +5,51 @@ AI Academic Success Companion - Chatbot Engine
 
 Purpose
 -------
-This module is the main controller for the AI chatbot.
+Main controller for the chatbot: crisis check, intent detection, RAG +
+emotion inference for counseling intents, RL strategy selection for
+counseling intents, prompt construction, and LLM generation.
 
-Responsibilities
-----------------
-1. Check for crisis-risk language and short-circuit to a fixed
-   resource response if found (never LLM-generated).
-2. Detect the user's intent.
-3. For counseling intents: infer emotional state, retrieve relevant
-   knowledge-base context via RAG, and build an empathetic,
-   context-grounded prompt.
-4. For academic intents (gpa/study_plan/quiz/explanation/general):
-   build the appropriate prompt as before.
-5. Send the prompt to the LLM (Llama 3.2 via Ollama).
-6. Return a structured, state-aware response.
+RL integration (strategy_selector.py)
+--------------------------------------
+For counseling-intent messages only, after inferring emotion/stress
+type, the bandit in strategy_selector.py picks ONE of four pre-written
+response strategies (see prompt_builder.STRATEGIES / _STRATEGY_RULE_BLOCKS)
+based on that context. The chosen strategy is returned in the result
+dict as "strategy", so the caller (chatbot_service.py) can log it -
+that log is both how the bandit learns (once feedback arrives) and the
+raw evaluation data for the research writeup.
+
+The bandit NEVER runs for crisis-risk messages (those short-circuit
+before intent detection even happens) and never runs for academic
+intents (gpa/study_plan/quiz/explanation) - it is scoped exclusively
+to the counseling-support response style, by design.
+
+Intent coverage (why this matters for RL)
+-------------------------------------------
+The RL bandit only ever sees a (context, action, reward) sample when a
+message is classified into a COUNSELING_INTENTS category. If a
+student's real phrasing doesn't match any INTENT_PATTERNS regex, the
+message falls into "general" - which never touches RAG, emotion
+inference, or the bandit at all, and never gets a feedback_id, so no
+thumbs-up/down is even possible on that turn. That's not just a UX gap
+(missing feedback buttons) - it silently starves the bandit of
+training data for however students actually phrase things versus how
+the regexes were written.
+
+Two things address this:
+  1. INTENT_PATTERNS below is broadened to catch common bare phrasings
+     ("am stressed", "i'm stressed") in addition to cause-specific ones.
+  2. A generic fallback in detect_intent(): if nothing else matches but
+     the message contains clear emotional-distress language, it routes
+     to "emotional_checkin" (a COUNSELING_INTENTS member) rather than
+     "general". This is deliberately broad/low-precision by design -
+     it's fine to occasionally misroute a mildly-worded message into
+     counseling, but bad to silently drop a real distress signal into
+     the generic chit-chat path with no RAG, no emotion tracking, and
+     no RL learning signal.
 
 This module is stateless. Sessions, persistence, and the database are
 handled by other layers (see services/chatbot_service.py).
-
-Author: Member 1 - AI & Chatbot
 """
 
 import re
@@ -33,12 +59,10 @@ import llm
 import prompt_builder
 import inference
 import rag
+import strategy_selector
 
-
-# Intent Detection
 
 INTENT_PATTERNS = {
-    # --- Counseling intents (stress / career / emotional support) ---
     "career_anxiety": [
         r"job", r"career", r"internship", r"resume", r"\bcv\b",
         r"interview", r"진로", r"취업", r"면접", r"what should i do after (i )?graduat"
@@ -47,6 +71,10 @@ INTENT_PATTERNS = {
         r"stressed.*(exam|class|grade|assignment|deadline)",
         r"(exam|class|grade|assignment|deadline).*stress",
         r"burnt? out", r"burned out", r"overwhelm", r"can'?t keep up",
+        # Broadened: catch bare "I'm stressed" statements with no
+        # explicit cause word attached, not just cause-paired phrasings.
+        r"\bam stressed\b", r"\bi'?m stressed\b", r"\bso stressed\b",
+        r"\breally stressed\b", r"\bfeeling stressed\b", r"\bstressed out\b",
         r"학업\s*스트레스", r"시험\s*스트레스"
     ],
     "stress_interpersonal": [
@@ -59,43 +87,24 @@ INTENT_PATTERNS = {
         r"having a hard time", r"i'?m struggling",
         r"기분이\s*안좋", r"힘들어"
     ],
-
-    # --- Academic intents (existing) ---
     "gpa": [
-        r"\bgpa\b",
-        r"grade point",
-        r"improve.*grade",
-        r"raise my grade",
-        r"academic performance"
+        r"\bgpa\b", r"grade point", r"improve.*grade", r"raise my grade",
+        r"academic performance", r"성적", r"학점", r"평점"
     ],
     "study_plan": [
-        r"study plan",
-        r"revision plan",
-        r"study schedule",
-        r"prepare for",
-        r"plan.*exam",
-        r"how should i study"
+        r"study plan", r"revision plan", r"study schedule", r"prepare for",
+        r"plan.*exam", r"how should i study", r"공부\s*계획", r"학습\s*계획"
     ],
     "quiz": [
-        r"\bquiz\b",
-        r"practice question",
-        r"mock exam",
-        r"mock test",
-        r"test me",
-        r"give me questions"
+        r"\bquiz\b", r"practice question", r"mock exam", r"mock test",
+        r"test me", r"give me questions", r"퀴즈", r"문제\s*내", r"연습\s*문제"
     ],
     "explanation": [
-        r"^explain",
-        r"define",
-        r"what is",
-        r"what are",
-        r"how does",
-        r"can you explain"
+        r"^explain", r"define", r"what is", r"what are", r"how does",
+        r"can you explain", r"설명해", r"이란\s*무엇", r"뭐야\??$"
     ]
 }
 
-# Intents routed through the RAG + emotion-aware counseling pipeline
-# instead of the plain academic prompt builders below.
 COUNSELING_INTENTS = {
     "career_anxiety",
     "stress_academic",
@@ -103,14 +112,22 @@ COUNSELING_INTENTS = {
     "emotional_checkin",
 }
 
+# Low-precision, deliberately broad fallback signal: if no specific
+# intent pattern matched but the message clearly contains distress
+# language, route to emotional_checkin rather than losing it to
+# "general". False positives here (a mildly-worded message getting
+# routed to counseling) are an acceptable trade-off against the
+# alternative - a genuine distress signal getting no RAG, no emotion
+# tracking, and no RL feedback opportunity at all.
+GENERIC_DISTRESS_PATTERNS = [
+    r"\bstress(ed)?\b", r"\banxious\b", r"\banxiety\b", r"\bworried\b",
+    r"\bexhausted\b", r"\btired of\b", r"\bstruggling\b", r"\boverwhelmed\b",
+    r"\bsad\b", r"\bdown\b",
+    r"스트레스", r"불안", r"걱정", r"힘들",
+]
+
 
 def detect_intent(message: str) -> str:
-    """
-    Detect the user's intent using lightweight rule-based matching.
-
-    Returns one of the keys in INTENT_PATTERNS, or "general" if
-    nothing matches.
-    """
     text = message.lower()
 
     for intent, patterns in INTENT_PATTERNS.items():
@@ -118,21 +135,20 @@ def detect_intent(message: str) -> str:
             if re.search(pattern, text):
                 return intent
 
+    # Nothing specific matched - check the broad distress fallback
+    # before giving up and calling it "general".
+    for pattern in GENERIC_DISTRESS_PATTERNS:
+        if re.search(pattern, text):
+            return "emotional_checkin"
+
     return "general"
 
 
 MAX_TOKENS_BY_INTENT = {
-    "general": 180,
-    "gpa": 160,
-    "explanation": 200,
-    "study_plan": 300,
-    "quiz": 380,
-    "career_anxiety": 220,
-    "stress_academic": 220,
-    "stress_interpersonal": 220,
-    "emotional_checkin": 200,
+    "general": 180, "gpa": 160, "explanation": 200, "study_plan": 300,
+    "quiz": 380, "career_anxiety": 180, "stress_academic": 180,
+    "stress_interpersonal": 180, "emotional_checkin": 160,
 }
-
 
 PROMPT_BUILDERS = {
     "gpa": prompt_builder.build_gpa_prompt,
@@ -142,8 +158,6 @@ PROMPT_BUILDERS = {
 }
 
 
-# Main Chatbot Entry Point
-
 def handle_message(
     user_message: str,
     history: Optional[List[Dict]] = None,
@@ -151,69 +165,45 @@ def handle_message(
     language: str = "en",
 ) -> Dict:
     """
-    Main chatbot entry point.
-
-    Parameters
-    ----------
-    user_message : str
-        Student's message.
-
-    history : list
-        Previous conversation turns. Used for the "general" intent and
-        all counseling intents. Specialized academic prompts (GPA,
-        quiz, etc.) stay single-turn and focused for reliability.
-
-    trend_info : dict, optional
-        Multi-session pattern summary from trend_service.get_recent_trend(),
-        e.g. {"direction": "worsening", "dominant_stress_type": "academic", ...}.
-        Only used for counseling intents; ignored otherwise. This
-        module stays stateless -- the caller (chatbot_service.py) is
-        responsible for computing this from the DB and passing it in.
-
-    language : str
-        "en" or "ko". Controls both the fixed crisis response text and
-        an instruction appended to every LLM system prompt to reply in
-        that language. Defaults to "en" so existing callers that don't
-        pass this keep working unchanged.
-
-    Returns
-    -------
-    dict
+    Returns:
         {
             "intent": "...",
             "response": "...",
-            "emotion": {...} | None,   # only populated for counseling intents
+            "emotion": {...} | None,
+            "strategy": "validate_ask" | ... | None,   # only set for counseling intents
             "error": None
         }
     """
     if not user_message.strip():
-        return {
-            "intent": None,
-            "response": "",
-            "emotion": None,
-            "error": "Message cannot be empty."
-        }
+        return {"intent": None, "response": "", "emotion": None, "strategy": None,
+                "error": "Message cannot be empty."}
 
-    # Crisis check runs before intent detection and before any LLM
-    # call. This is intentional - a fixed, human-reviewed response is
-    # far safer here than anything model-generated.
     if inference.check_crisis_risk(user_message):
         return {
             "intent": "crisis",
             "response": prompt_builder.get_crisis_response(language),
             "emotion": {"emotion": "crisis", "stress_type": "crisis", "risk": True},
-            "error": None
+            "strategy": None,  # RL never touches crisis handling
+            "error": None,
         }
 
     intent = detect_intent(user_message)
     emotion_info = None
+    strategy = None
 
     if intent in COUNSELING_INTENTS:
         emotion_info = inference.infer_emotional_state(user_message, history)
+
+        # --- RL strategy selection happens here, and only here ---
+        strategy, _scores = strategy_selector.select_strategy(
+            emotion_info["emotion"], emotion_info["stress_type"]
+        )
+
         rag_category = "career_employment" if intent == "career_anxiety" else None
         retrieved_chunks = rag.retrieve(user_message, k=3, category=rag_category)
         messages = prompt_builder.build_counseling_prompt(
-            user_message, history, retrieved_chunks, emotion_info, trend_info, language
+            user_message, history, retrieved_chunks, emotion_info,
+            trend_info, language, strategy,
         )
     elif intent == "general":
         messages = prompt_builder.build_messages(user_message, history, language)
@@ -223,110 +213,12 @@ def handle_message(
     try:
         token_cap = MAX_TOKENS_BY_INTENT.get(intent, 200)
         response = llm.generate_response(messages, max_tokens=token_cap)
-
         return {
-            "intent": intent,
-            "response": response,
-            "emotion": emotion_info,
-            "error": None
+            "intent": intent, "response": response, "emotion": emotion_info,
+            "strategy": strategy, "error": None,
         }
-
     except llm.LLMConnectionError as e:
         return {
-            "intent": intent,
-            "response": "",
-            "emotion": emotion_info,
-            "error": str(e)
+            "intent": intent, "response": "", "emotion": emotion_info,
+            "strategy": strategy, "error": str(e),
         }
-
-
-# Streaming variant (for web UIs - shows text as it's generated
-# instead of waiting for the full reply)
-
-def stream_message(user_message: str, history: Optional[List[Dict]] = None):
-    """
-    Same behavior as handle_message, but yields events instead of
-    returning one dict. Used by app.py's /chat streaming endpoint.
-
-    Yields dicts of one of these shapes:
-        {"type": "intent", "intent": "gpa"}
-        {"type": "emotion", "emotion": {...}}     (counseling intents only)
-        {"type": "chunk", "text": "..."}          (repeated, in order)
-        {"type": "error", "error": "..."}
-
-    Crisis-risk messages skip streaming entirely and yield the fixed
-    response as a single chunk, since it's not LLM-generated.
-    """
-    if not user_message.strip():
-        yield {"type": "error", "error": "Message cannot be empty."}
-        return
-
-    if inference.check_crisis_risk(user_message):
-        yield {"type": "intent", "intent": "crisis"}
-        yield {"type": "chunk", "text": prompt_builder.CRISIS_RESPONSE}
-        return
-
-    intent = detect_intent(user_message)
-    yield {"type": "intent", "intent": intent}
-
-    if intent in COUNSELING_INTENTS:
-        emotion_info = inference.infer_emotional_state(user_message, history)
-        yield {"type": "emotion", "emotion": emotion_info}
-        rag_category = "career_employment" if intent == "career_anxiety" else None
-        retrieved_chunks = rag.retrieve(user_message, k=3, category=rag_category)
-        messages = prompt_builder.build_counseling_prompt(
-            user_message, history, retrieved_chunks, emotion_info
-        )
-    elif intent == "general":
-        messages = prompt_builder.build_messages(user_message, history)
-    else:
-        messages = PROMPT_BUILDERS[intent](user_message, history)
-
-    token_cap = MAX_TOKENS_BY_INTENT.get(intent, 200)
-
-    try:
-        for chunk in llm.stream_response(messages, max_tokens=token_cap):
-            yield {"type": "chunk", "text": chunk}
-    except llm.LLMConnectionError as e:
-        yield {"type": "error", "error": str(e)}
-
-
-# CLI Test Loop
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("AI Academic Success Companion (Nova)")
-    print("Type 'exit' to quit.")
-    print("=" * 60)
-
-    history = []
-
-    while True:
-        question = input("\nYou: ").strip()
-
-        if question.lower() in ("exit", "quit"):
-            print("\nGoodbye!")
-            break
-
-        print("\n(thinking... this can take up to a minute on a laptop CPU)")
-
-        result = handle_message(question, history)
-
-        if result["error"]:
-            print(f"\nError: {result['error']}")
-            continue
-
-        print(f"\nIntent : {result['intent']}")
-        if result["emotion"]:
-            print(f"Emotion: {result['emotion']}")
-        print(f"\nAssistant:\n{result['response']}")
-
-        # Append to CLI history so subsequent calls retain context
-        history.append({
-            "role": "user",
-            "content": question
-        })
-        history.append({
-            "role": "assistant",
-            "content": result["response"]
-        })

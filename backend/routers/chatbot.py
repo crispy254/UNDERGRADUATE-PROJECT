@@ -17,7 +17,24 @@ existing DB schema and trend-tracking logic don't need to change), but
 nobody has to log in or out to use the app. If real multi-user auth
 gets added later, swap resolve_user_id() for the auth dependency and
 nothing else in this file needs to change.
+
+TTS on typed replies
+---------------------
+Previously only routers/voice.py (the mic path) returned audio - typed
+messages through /chat/counseling got text only, so the avatar had
+nothing to lip-sync to for typed conversations. This now generates
+speech for the counseling reply here too, reusing the exact same TTS
+engine/voice-selection logic as voice.py (see voice/tts.py), so a
+typed reply and a spoken reply sound identical rather than using two
+different pipelines.
+
+Same "never break the chat over a voice failure" pattern as voice.py:
+if TTS fails for any reason, audio_base64 comes back None and the
+text reply still succeeds - see schemas.CounselingResponse, which
+already has audio_base64 as Optional.
 """
+import base64
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -44,6 +61,7 @@ from services.chatbot_service import (
     get_counseling_reply,
     ensure_user_exists,
 )
+from voice.tts import synthesize_speech, get_voice_index_for_language, TTSError
 
 router = APIRouter(
     prefix="/chat",
@@ -79,7 +97,20 @@ def counseling(
     # inference in chatbot_engine.py, and logs inferred emotional
     # state via services/chatbot_service.py.
     user_id = resolve_user_id(request.user_id, db)
-    return get_counseling_reply(db, user_id, request.message, language=request.language)  # ← pass language to service
+    result = get_counseling_reply(db, user_id, request.message, language=request.language)
+
+    # Generate speech for the reply so the avatar has audio to
+    # lip-sync to on typed messages too, not just voice-mic replies.
+    voice_index, _voice_found = get_voice_index_for_language(request.language)
+    try:
+        audio_bytes = synthesize_speech(result["reply"], voice_index=voice_index)
+        result["audio_base64"] = base64.b64encode(audio_bytes).decode("ascii")
+    except TTSError:
+        # Degrade gracefully - text reply still goes out even if TTS
+        # is unavailable/misconfigured, same pattern as voice.py.
+        result["audio_base64"] = None
+
+    return result
 
 
 @router.post("/study-plan")

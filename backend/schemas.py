@@ -78,9 +78,11 @@ class CounselingRequest(BaseModel):
 
 class CounselingResponse(BaseModel):
     reply: str
-    emotion: Optional[str] = None
-    stress_type: Optional[str] = None
+    emotion: str | None = None
+    stress_type: str | None = None
     risk_flag: bool = False
+    feedback_id: int | None = None
+    audio_base64: str | None = None   # ← add this
 
 
 class EmotionLogResponse(BaseModel):
